@@ -1,4 +1,7 @@
+import argparse
+import os
 import re
+from typing import Optional
 
 class DirectiveParseError(Exception):
 	pass
@@ -7,8 +10,11 @@ class ParserState:
 	def __init__(self):
 		self.conditional_stack = []
 
-	def stack_is_empty(self):
-		return len(self.conditional_stack) == 0
+	def get_stack_level(self) -> int:
+		return len(self.conditional_stack)
+
+	def stack_is_empty(self) -> bool:
+		return self.get_stack_level() == 0
 
 	def start_if(self) -> None:
 		# Start an #if...#elif...#else...#endif block
@@ -61,9 +67,24 @@ class ParserState:
 
 		return conditional
 
-def parse(path:str, relative_path:str, output_folder:str, hide_code:bool) -> bool:
+def get_involved_features(condition:str) -> set[str]:
+	return set(re.findall('defined[\( ]([A-Za-z0-9_]+)\)?', condition))
+
+def parse(
+	path: str,
+	relative_path: str,
+	output_folder: str,
+	arg: argparse.Namespace,
+	# ref:
+	features: set[str],
+	feature_possible_guards: set[str],
+	nesting_level_stats: dict[int,int],
+	feature_interaction_stats: dict[int,int]
+) -> bool:
 	report_line = ''
 	annotated_file = ''
+	stack_level_deepest = 0
+	stack_level_latest = 0
 	result = False
 	try:
 		# Interpreting UTF-8 as old-school-codepage won't matter in our case, other way around is a crash...
@@ -78,13 +99,15 @@ def parse(path:str, relative_path:str, output_folder:str, hide_code:bool) -> boo
 				clean_line = re.sub('\/\*.*$', '', clean_line)
 				clean_line = re.sub('\/\/.*$', '', clean_line).strip()
 				clean_line = re.sub('^#\s+', '#', clean_line)
-				if clean_continued_line:
-					clean_line = clean_continued_line + clean_line
 
 				if full_line.endswith('\\\n') or full_line.endswith('\\\r\n'):
 					clean_continued_line += clean_line + ' '
 					multi_lines += full_line
 					continue
+
+				if clean_continued_line:
+					clean_line = clean_continued_line + clean_line
+					pass
 
 				condition_changed = False
 				if clean_line.startswith('#'):
@@ -98,19 +121,50 @@ def parse(path:str, relative_path:str, output_folder:str, hide_code:bool) -> boo
 						parse_else(state, clean_line)
 					elif clean_line.startswith('#endif'):
 						parse_endif(state, clean_line)
+					elif clean_line.startswith('#define') and arg.features:
+						possible_guard = parse_define(state, clean_line)
+						if possible_guard is not None:
+							feature_possible_guards.add(possible_guard)
+						condition_changed = False
 					else:
 						condition_changed = False
-				elif not hide_code:
+				elif not arg.hide_code:
 					annotated_file += multi_lines + full_line
 				clean_continued_line = ''
 				multi_lines = ''
 
 				if condition_changed:
+					stack_level = state.get_stack_level()
+					if stack_level > stack_level_deepest:
+						stack_level_deepest = stack_level
+
+					if stack_level >= stack_level_latest:
+						if stack_level in nesting_level_stats:
+							nesting_level_stats[stack_level] += 1
+						else:
+							nesting_level_stats[stack_level] = 1
+
+					stack_level_latest = stack_level
+
 					condition = state.calculate_current_conditional()
+
 					if condition == '':
-						annotated_file += '// [pdparser] Always\n'
+						annotated_file += '// [pdparser] L{}, always\n'.format(stack_level)
 					else:
-						annotated_file += '// [pdparser] Only if {}\n'.format(condition)
+						annotated_file += '// [pdparser] L{}, only if {}\n'.format(stack_level, condition)
+
+					if arg.features:
+						current_involved_features = get_involved_features(condition)
+
+						annotated_file += '// [pdparser] Features involved: {}\n'.format(current_involved_features)
+
+						features.update(current_involved_features)
+
+						n_involved_features = len(current_involved_features)
+						if n_involved_features in feature_interaction_stats:
+							feature_interaction_stats[n_involved_features] += 1
+						else:
+							feature_interaction_stats[n_involved_features] = 1
 
 			if not state.stack_is_empty():
 				raise DirectiveParseError('Unexpected EOF, too few #endif!')
@@ -125,13 +179,17 @@ def parse(path:str, relative_path:str, output_folder:str, hide_code:bool) -> boo
 
 		result = False
 
+	annotated_file += '\n// [pdparser] deepest level: {}\n'.format(stack_level_deepest)
+
 	# Write the annotated file
 	if output_folder is not None:
 		if path == relative_path:
 			print('    Not writing output file, relative path is full path!')
 		else:
+			output_path = '{}/{}'.format(output_folder, relative_path)
+			os.makedirs(output_path[:output_path.rindex('/')], exist_ok=True)
 			try:
-				with open('{}/{}'.format(output_folder, relative_path), 'w') as outfile:
+				with open(output_path, 'w') as outfile:
 					outfile.write(annotated_file)
 			except Exception as e:
 				print('    Writing output file failed!')
@@ -175,3 +233,18 @@ def parse_endif(state:ParserState, line:str) -> None:
 		raise DirectiveParseError('Could not match #endif!')
 
 	state.end_if()
+
+def parse_define(state:ParserState, line:str) -> Optional[str]:
+	#define POSSIBLE_INCLUDE_GUARD
+	m = re.search('^#define\s+(?P<identifier>[A-Za-z0-9_]+)\s*$', line)
+	if m is None:
+		# We're actually defining something here, or we can't parse it - but it's off the table
+		return None
+
+	# We're defining a bare identifier. Is that feature already involved?
+	identifier = m.group('identifier')
+	if identifier in get_involved_features(state.calculate_current_conditional()):
+		print('    Possible include guard: {}'.format(identifier))
+		return identifier
+
+	return None
