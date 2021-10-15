@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 
 import argparse
+import json
 import os
+import time
 
 import source_parser
 import util
@@ -12,6 +14,7 @@ arg_parse.add_argument('-o', '--output', type=str, help='the folder to write ann
 arg_parse.add_argument('-v', '--verbosity', type=int, choices=[0,1,2], default=1, help='determine level of output verbosity')
 arg_parse.add_argument('-d', '--hide-code', action='store_true', help='hide code from output files except preprocessor directives and annotations')
 arg_parse.add_argument('-f', '--features', action='store_true', help='try to get all involved features in defined(X)')
+arg_parse.add_argument('-j', '--json-result', action='store_true', help='store a json file with general results in the output folder')
 arg = arg_parse.parse_args()
 
 util.set_verbosity(arg.verbosity)
@@ -34,8 +37,11 @@ n_parser_errors = 0
 ignored_exts = set()
 all_features = set()
 all_features_possible_guards = set()
-nesting_level_stats = {}
+all_features_trimmed = set()
 feature_interaction_stats = {}
+nesting_level_stats = {}
+
+t_start = time.perf_counter()
 
 while folders:
 	folder = folders.pop(0)
@@ -49,7 +55,8 @@ while folders:
 			util.vprint(2, 'Ignoring symlink {}'.format(relative_path))
 			continue
 		if f.is_dir():
-			folders.append(os.path.abspath(f.path))
+			if f.name != '.git':
+				folders.append(os.path.abspath(f.path))
 			continue
 		if not f.is_file():
 			util.vprint(2, '{} is not a file or folder or symlink'.format(relative_path))
@@ -81,6 +88,9 @@ while folders:
 			if name_ext[1] != '':
 				ignored_exts.add(name_ext[1])
 
+t_end = time.perf_counter()
+t_taken = t_end - t_start
+
 util.vprint(1, '{} source files, {} ignored files, {} parser errors'.format(
 		n_source_files, n_ignored_files, n_parser_errors
 	)
@@ -96,3 +106,34 @@ if arg.features:
 	util.vprint(1, 'Feature interaction stats (#features occurring in conditional): {}'.format(feature_interaction_stats))
 
 util.vprint(1, 'Nesting level stats: {}'.format(nesting_level_stats))
+
+util.vprint(1, 'Total time taken to run: {}'.format(t_taken))
+
+
+if arg.json_result:
+	if output_folder is None:
+		util.vprint(1, '-j/--json-result passed, but no output folder specified!')
+	else:
+		if not arg.features:
+			util.vprint(1, '-j/--json-result passed, but not -f/--features (will be empty!)')
+
+		json_name = '{}/pdparser-result.json'.format(output_folder)
+		with open(json_name, 'w') as outfile:
+			json.dump(
+				{
+					'n_source_files': n_source_files,
+					'n_ignored_files': n_ignored_files,
+					'n_parser_errors': n_parser_errors,
+					'ignored_exts': list(ignored_exts),
+					'n_possible_guards': len(all_features_possible_guards),
+					'possible_guards': list(all_features_possible_guards),
+					'n_features': len(all_features_trimmed),
+					'features': list(all_features_trimmed),
+					'feature_interaction_stats': feature_interaction_stats,
+					'nesting_level_stats': nesting_level_stats,
+					'time_taken': t_taken,
+				},
+				outfile
+			)
+
+		util.vprint(1, 'Wrote json to {}'.format(json_name))

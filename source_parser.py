@@ -68,7 +68,7 @@ class ParserState:
 		return conditional
 
 def get_involved_features(condition:str) -> set[str]:
-	return set(re.findall('defined[\( ]([A-Za-z0-9_]+)\)?', condition))
+	return set(re.findall('defined\s*[\(\s]([A-Za-z0-9_]+)\)?', condition))
 
 def parse(
 	path: str,
