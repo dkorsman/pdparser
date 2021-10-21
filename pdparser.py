@@ -14,7 +14,8 @@ arg_parse.add_argument('-o', '--output', type=str, help='the folder to write ann
 arg_parse.add_argument('-v', '--verbosity', type=int, choices=[0,1,2], default=1, help='determine level of output verbosity')
 arg_parse.add_argument('-d', '--hide-code', action='store_true', help='hide code from output files except preprocessor directives and annotations')
 arg_parse.add_argument('-f', '--features', action='store_true', help='try to get all involved features in defined(X)')
-arg_parse.add_argument('-j', '--json-result', action='store_true', help='store a json file with general results in the output folder')
+arg_parse.add_argument('-jr', '--json-result', action='store_true', help='store a json file with general results in the output folder')
+arg_parse.add_argument('-jp', '--json-pinpoint', action='store_true', help='store json files with all locations of nesting levels and feature interactions')
 arg = arg_parse.parse_args()
 
 util.set_verbosity(arg.verbosity)
@@ -40,6 +41,8 @@ all_features_possible_guards = set()
 all_features_trimmed = set()
 feature_interaction_stats = {}
 nesting_level_stats = {}
+pinpoint_feature_interaction_stats = {}
+pinpoint_nesting_level_stats = {}
 
 t_start = time.perf_counter()
 
@@ -77,7 +80,9 @@ while folders:
 				all_features,
 				all_features_possible_guards,
 				nesting_level_stats,
-				feature_interaction_stats
+				feature_interaction_stats,
+				pinpoint_nesting_level_stats,
+				pinpoint_feature_interaction_stats
 			)
 
 			if not result:
@@ -112,10 +117,10 @@ util.vprint(1, 'Total time taken to run: {}'.format(t_taken))
 
 if arg.json_result:
 	if output_folder is None:
-		util.vprint(1, '-j/--json-result passed, but no output folder specified!')
+		util.vprint(1, '-jr/--json-result passed, but no output folder specified!')
 	else:
 		if not arg.features:
-			util.vprint(1, '-j/--json-result passed, but not -f/--features (will be empty!)')
+			util.vprint(1, '-jr/--json-result passed, but not -f/--features (will be empty!)')
 
 		json_name = '{}/pdparser-result.json'.format(output_folder)
 		with open(json_name, 'w') as outfile:
@@ -136,4 +141,20 @@ if arg.json_result:
 				outfile
 			)
 
-		util.vprint(1, 'Wrote json to {}'.format(json_name))
+		util.vprint(1, 'Wrote result json to {}'.format(json_name))
+
+if arg.json_pinpoint:
+	if output_folder is None:
+		util.vprint(1, '-jp/--json-pinpoint passed, but no output folder specified!')
+	elif not arg.features:
+		util.vprint(1, '-jr/--json-pinpoint passed, but not -f/--features!)')
+	else:
+		json_name = '{}/pdparser-pinpoint-feature-interaction.json'.format(output_folder)
+		with open(json_name, 'w') as outfile:
+			json.dump(pinpoint_feature_interaction_stats, outfile)
+		util.vprint(1, 'Wrote feature interaction pinpoint json to {}'.format(json_name))
+
+		json_name = '{}/pdparser-pinpoint-nesting-level.json'.format(output_folder)
+		with open(json_name, 'w') as outfile:
+			json.dump(pinpoint_nesting_level_stats, outfile)
+		util.vprint(1, 'Wrote nesting level pinpoint json to {}'.format(json_name))
