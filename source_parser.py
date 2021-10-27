@@ -93,26 +93,28 @@ def parse(
 		with open(path, 'r', encoding="ISO-8859-1") as infile:
 			state = ParserState()
 
-			clean_continued_line = ''
+			continued_line = ''
 			multi_lines = ''
 			line_number = 0
 			for full_line in infile:
 				line_number += 1
 
 				report_line = full_line.strip()
-				clean_line = re.sub('\/\*.*?\*\/', '', full_line)
-				clean_line = re.sub('\/\*.*$', '', clean_line)
-				clean_line = re.sub('\/\/.*$', '', clean_line).strip()
-				clean_line = re.sub('^#\s+', '#', clean_line)
 
 				if full_line.endswith('\\\n') or full_line.endswith('\\\r\n'):
-					clean_continued_line += clean_line + ' '
+					continued_line += full_line.strip() + ' '
 					multi_lines += full_line
 					continue
 
-				if clean_continued_line:
-					clean_line = clean_continued_line + clean_line
-					pass
+				clean_line = full_line
+				if continued_line:
+					clean_line = continued_line + clean_line
+
+				# Remove comments and clean up the line a little bit.
+				clean_line = re.sub('\/\*.*?\*\/', '', clean_line)
+				clean_line = re.sub('\/\*.*$', '', clean_line)
+				clean_line = re.sub('\/\/.*$', '', clean_line).strip()
+				clean_line = re.sub('^#\s+', '#', clean_line)
 
 				condition_changed = False
 				if clean_line.startswith('#'):
@@ -135,7 +137,7 @@ def parse(
 						condition_changed = False
 				elif not arg.hide_code:
 					annotated_file += multi_lines + full_line
-				clean_continued_line = ''
+				continued_line = ''
 				multi_lines = ''
 
 				if condition_changed:
@@ -220,7 +222,8 @@ def parse(
 
 def parse_ifdef(state:ParserState, line:str) -> None:
 	#ifn?def IDENTIFIER
-	m = re.search('^#if(?P<n>n?)def\s+(?P<identifier>[A-Za-z0-9_]+)$', line)
+	# Some projects seem to use some kind of template placeholders with @ and $ in their identifiers...
+	m = re.search('^#if(?P<n>n?)def\s*\(?(?P<identifier>[A-Za-z0-9_@\$]+)\)?$', line)
 	if m is None:
 		raise DirectiveParseError('Could not match #ifdef/#ifndef!')
 
@@ -249,7 +252,8 @@ def parse_else(state:ParserState, line:str) -> None:
 
 def parse_endif(state:ParserState, line:str) -> None:
 	#endif
-	m = re.search('^#endif$', line)
+	# Some projects do #endif FEATURE, this is wrong, but only a warning...
+	m = re.search('^#endif(\s+[A-Za-z0-9_]*)?$', line)
 	if m is None:
 		raise DirectiveParseError('Could not match #endif!')
 
