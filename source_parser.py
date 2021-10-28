@@ -96,13 +96,14 @@ def parse(
 			continued_line = ''
 			multi_lines = ''
 			line_number = 0
+			multiline_commented = False
 			for full_line in infile:
 				line_number += 1
 
 				report_line = full_line.strip()
 
 				if full_line.endswith('\\\n') or full_line.endswith('\\\r\n'):
-					continued_line += full_line.strip() + ' '
+					continued_line += full_line.strip()[:-1] + ' '
 					multi_lines += full_line
 					continue
 
@@ -111,9 +112,18 @@ def parse(
 					clean_line = continued_line + clean_line
 
 				# Remove comments and clean up the line a little bit.
+				if multiline_commented and re.match(".*\*\/", clean_line) is not None:
+					clean_line = re.sub('^.*\*\/', '', clean_line)
+					multiline_commented = False
+				if multiline_commented:
+					# This entire line seems like it's nothing... We aren't ending the comment here.
+					clean_line = ''
 				clean_line = re.sub('\/\*.*?\*\/', '', clean_line)
+				clean_line = re.sub('\/\/.*$', '', clean_line)
+				if re.match(".*\/\*.*$", clean_line) is not None:
+					multiline_commented = True
 				clean_line = re.sub('\/\*.*$', '', clean_line)
-				clean_line = re.sub('\/\/.*$', '', clean_line).strip()
+				clean_line = clean_line.strip()
 				clean_line = re.sub('^#\s+', '#', clean_line)
 
 				condition_changed = False
