@@ -68,7 +68,7 @@ class ParserState:
 		return conditional
 
 def get_involved_features(condition:str) -> set[str]:
-	return set(re.findall('defined\s*[\(\s]([A-Za-z0-9_]+)\)?', condition))
+	return set(re.findall('defined\s*[\(\s]\s*([A-Za-z0-9_]+)\s*\)?', condition))
 
 def parse(
 	path: str,
@@ -112,17 +112,31 @@ def parse(
 					clean_line = continued_line + clean_line
 
 				# Remove comments and clean up the line a little bit.
-				if multiline_commented and re.match(".*\*\/", clean_line) is not None:
-					clean_line = re.sub('^.*\*\/', '', clean_line)
+				if multiline_commented and re.match(".*?\*\/", clean_line) is not None:
+					clean_line = re.sub('^.*?\*\/', '', clean_line)
 					multiline_commented = False
 				if multiline_commented:
 					# This entire line seems like it's nothing... We aren't ending the comment here.
 					clean_line = ''
+
+				# Make sure comment tags inside of strings aren't interpreted...
+				strings = []
+				def string_remove(match_obj):
+					strings.append(match_obj.group(0))
+					return '"STR_{}"'.format(len(strings)-1)
+				def string_restore(match_obj):
+					return '"{}"'.format(strings[int(match_obj[1])])
+				clean_line = re.sub('""|".*?[^\\\\]"', string_remove, clean_line)
+
 				clean_line = re.sub('\/\*.*?\*\/', '', clean_line)
-				clean_line = re.sub('\/\/.*$', '', clean_line)
-				if re.match(".*\/\*.*$", clean_line) is not None:
+				clean_line = re.sub('\/\/.*?$', '', clean_line)
+				if re.match(".*\/\*.*?$", clean_line) is not None:
 					multiline_commented = True
-				clean_line = re.sub('\/\*.*$', '', clean_line)
+				clean_line = re.sub('\/\*.*?$', '', clean_line)
+
+				# Restore strings
+				clean_line = re.sub('"STR_([0-9]+)"', string_restore, clean_line)
+
 				clean_line = clean_line.strip()
 				clean_line = re.sub('^#\s+', '#', clean_line)
 

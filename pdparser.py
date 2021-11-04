@@ -67,7 +67,7 @@ while folders:
 
 		name_ext = os.path.splitext(f.path)
 
-		if name_ext[1].lower() in ('.c', '.cpp', '.h', '.hpp', '.cxx', '.inc', '.m', '.cc'):
+		if name_ext[1].lower() in ('.c', '.cpp', '.h', '.hpp', '.cxx', '.m', '.cc'):
 			util.vprint(1, 'Found {}'.format(relative_path))
 			n_source_files += 1
 
