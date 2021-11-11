@@ -11,24 +11,27 @@ import util
 arg_parse = argparse.ArgumentParser()
 arg_parse.add_argument('source', help='the source folder to operate on')
 arg_parse.add_argument('-o', '--output', type=str, help='the folder to write annotated source files to')
-arg_parse.add_argument('-v', '--verbosity', type=int, choices=[0,1,2], default=1, help='determine level of output verbosity')
+arg_parse.add_argument('-q', '--quiet', type=str, nargs='*', metavar='CAT', help='silence a category of messages')
 arg_parse.add_argument('-d', '--hide-code', action='store_true', help='hide code from output files except preprocessor directives and annotations')
 arg_parse.add_argument('-f', '--features', action='store_true', help='try to get all involved features in defined(X)')
+arg_parse.add_argument('-B', '--no-blacklist', action='store_true', help='ignore pdparser-blacklist.lst file (to get all files again)')
 arg_parse.add_argument('-jr', '--json-result', action='store_true', help='store a json file with general results in the output folder')
 arg_parse.add_argument('-jp', '--json-pinpoint', action='store_true', help='store json files with all locations of nesting levels and feature interactions')
 arg = arg_parse.parse_args()
 
-util.set_verbosity(arg.verbosity)
+if arg.quiet is not None:
+	for q in arg.quiet:
+		util.hide_cat(q)
 
 if arg.output is None:
-	util.vprint(1, 'Dry-running: no output folder passed (-o/--output)')
+	util.catprint('WARN', 'Dry-running: no output folder passed (-o/--output)')
 	output_folder = None
 else:
 	output_folder = os.path.abspath(arg.output)
 
 source_folder = os.path.abspath(arg.source)
 
-util.vprint(1, 'Using source folder {}'.format(source_folder))
+util.catprint('info', 'Using source folder {}'.format(source_folder))
 
 folders = [source_folder]
 
@@ -46,6 +49,22 @@ pinpoint_nesting_level_stats = {}
 
 t_start = time.perf_counter()
 
+
+filename_blacklist = set()
+blacklist_name = '{}/pdparser-blacklist.lst'.format(source_folder)
+if arg.no_blacklist:
+	util.catprint('info', 'Ignoring blacklist file at {} (-B/--no-blacklist was used)'.format(blacklist_name))
+else:
+	try:
+		with open(blacklist_name, 'r') as infile:
+			for full_line in infile:
+				filename_blacklist.add(full_line.strip())
+		util.catprint('info', 'Blacklist file present at {}'.format(blacklist_name))
+	except FileNotFoundError:
+		util.catprint('info', 'Blacklist file not present (search path: {}), accepting all paths'.format(blacklist_name))
+		pass
+
+
 while folders:
 	folder = folders.pop(0)
 
@@ -54,21 +73,24 @@ while folders:
 		if f.path.startswith(source_folder):
 			relative_path = f.path[len(source_folder)+1:]
 
+		if filename_blacklist and any(relative_path.startswith(bl) for bl in filename_blacklist):
+			util.catprint('debug', 'Ignoring blacklisted file {}'.format(relative_path))
+			continue
 		if f.is_symlink():
-			util.vprint(2, 'Ignoring symlink {}'.format(relative_path))
+			util.catprint('debug', 'Ignoring symlink {}'.format(relative_path))
 			continue
 		if f.is_dir():
 			if f.name != '.git':
 				folders.append(os.path.abspath(f.path))
 			continue
 		if not f.is_file():
-			util.vprint(2, '{} is not a file or folder or symlink'.format(relative_path))
+			util.catprint('WARN', '{} is not a file or folder or symlink'.format(relative_path))
 			continue
 
 		name_ext = os.path.splitext(f.path)
 
 		if name_ext[1].lower() in ('.c', '.cpp', '.h', '.hpp', '.cxx', '.m', '.cc'):
-			util.vprint(1, 'Found {}'.format(relative_path))
+			util.catprint('debug', 'Found {}'.format(relative_path))
 			n_source_files += 1
 
 			result = source_parser.parse(
@@ -88,7 +110,7 @@ while folders:
 			if not result:
 				n_parser_errors += 1
 		else:
-			util.vprint(2, 'Ignoring {}'.format(relative_path))
+			util.catprint('debug', 'Ignoring non-C/C++ file {}'.format(relative_path))
 			n_ignored_files += 1
 			if name_ext[1] != '':
 				ignored_exts.add(name_ext[1])
@@ -96,31 +118,31 @@ while folders:
 t_end = time.perf_counter()
 t_taken = t_end - t_start
 
-util.vprint(1, '{} source files, {} ignored files, {} parser errors'.format(
+util.catprint('info', '{} source files, {} ignored files, {} parser errors'.format(
 		n_source_files, n_ignored_files, n_parser_errors
 	)
 )
-util.vprint(1, 'Ignored file extensions: {}'.format(ignored_exts))
+util.catprint('info', 'Ignored file extensions: {}'.format(ignored_exts))
 
 if arg.features:
-	util.vprint(1, '{} possible guards: {}'.format(len(all_features_possible_guards), all_features_possible_guards))
+	util.catprint('feat', '{} possible guards: {}'.format(len(all_features_possible_guards), all_features_possible_guards))
 
 	all_features_trimmed = all_features.difference(all_features_possible_guards)
-	util.vprint(1, '{} features without guards: {}'.format(len(all_features_trimmed), all_features_trimmed))
+	util.catprint('feat', '{} features without guards: {}'.format(len(all_features_trimmed), all_features_trimmed))
 
-	util.vprint(1, 'Feature interaction stats (#features occurring in conditional): {}'.format(feature_interaction_stats))
+	util.catprint('info', 'Feature interaction stats (#features occurring in conditional): {}'.format(feature_interaction_stats))
 
-util.vprint(1, 'Nesting level stats: {}'.format(nesting_level_stats))
+util.catprint('info', 'Nesting level stats: {}'.format(nesting_level_stats))
 
-util.vprint(1, 'Total time taken to run: {}'.format(t_taken))
+util.catprint('info', 'Total time taken to run: {}'.format(t_taken))
 
 
 if arg.json_result:
 	if output_folder is None:
-		util.vprint(1, '-jr/--json-result passed, but no output folder specified!')
+		util.catprint('ERROR', '-jr/--json-result passed, but no output folder specified!')
 	else:
 		if not arg.features:
-			util.vprint(1, '-jr/--json-result passed, but not -f/--features (will be empty!)')
+			util.catprint('ERROR', '-jr/--json-result passed, but not -f/--features (will be empty!)')
 
 		json_name = '{}/pdparser-result.json'.format(output_folder)
 		with open(json_name, 'w') as outfile:
@@ -141,20 +163,20 @@ if arg.json_result:
 				outfile
 			)
 
-		util.vprint(1, 'Wrote result json to {}'.format(json_name))
+		util.catprint('info', 'Wrote result json to {}'.format(json_name))
 
 if arg.json_pinpoint:
 	if output_folder is None:
-		util.vprint(1, '-jp/--json-pinpoint passed, but no output folder specified!')
+		util.catprint('ERROR', '-jp/--json-pinpoint passed, but no output folder specified!')
 	elif not arg.features:
-		util.vprint(1, '-jr/--json-pinpoint passed, but not -f/--features!)')
+		util.catprint('ERROR', '-jr/--json-pinpoint passed, but not -f/--features!)')
 	else:
 		json_name = '{}/pdparser-pinpoint-feature-interaction.json'.format(output_folder)
 		with open(json_name, 'w') as outfile:
 			json.dump(pinpoint_feature_interaction_stats, outfile)
-		util.vprint(1, 'Wrote feature interaction pinpoint json to {}'.format(json_name))
+		util.catprint('info', 'Wrote feature interaction pinpoint json to {}'.format(json_name))
 
 		json_name = '{}/pdparser-pinpoint-nesting-level.json'.format(output_folder)
 		with open(json_name, 'w') as outfile:
 			json.dump(pinpoint_nesting_level_stats, outfile)
-		util.vprint(1, 'Wrote nesting level pinpoint json to {}'.format(json_name))
+		util.catprint('info', 'Wrote nesting level pinpoint json to {}'.format(json_name))

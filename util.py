@@ -1,13 +1,10 @@
-verbosity = 0
+hidden_cats = set()
 
-def set_verbosity(level:int) -> None:
-	global verbosity
+def hide_cat(cat:str) -> None:
+	hidden_cats.add(cat)
 
-	verbosity = level
+def catprint(cat:str, text:str) -> None:
+	global hidden_cats
 
-# Verbose print
-def vprint(level:int, text:str) -> None:
-	global verbosity
-
-	if verbosity >= level:
-		print('[{}] {}'.format(level, text))
+	if cat not in hidden_cats:
+		print('[{:>12}] {}'.format(cat, text))

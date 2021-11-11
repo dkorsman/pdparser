@@ -3,6 +3,8 @@ import os
 import re
 from typing import Optional
 
+import util
+
 class DirectiveParseError(Exception):
 	pass
 
@@ -218,9 +220,9 @@ def parse(
 
 		result = True
 	except DirectiveParseError as e:
-		print('    Error parsing file {}!'.format(path))
-		print('    {}'.format(e))
-		print('    {}'.format(report_line))
+		util.catprint('parser-CRASH', '    Error parsing file {}!'.format(path))
+		util.catprint('parser-CRASH', '    {}'.format(e))
+		util.catprint('parser-CRASH', '    {}'.format(report_line))
 
 		annotated_file += '/* [pdparser] *CRASH*\n{}\n{}\n*/'.format(e, report_line)
 
@@ -231,7 +233,7 @@ def parse(
 	# Write the annotated file
 	if output_folder is not None:
 		if path == relative_path:
-			print('    Not writing output file, relative path is full path!')
+			util.catprint('parser-ERROR', '    Not writing output file, relative path is full path!')
 		else:
 			output_path = '{}/{}'.format(output_folder, relative_path)
 			os.makedirs(output_path[:output_path.rindex('/')], exist_ok=True)
@@ -239,8 +241,8 @@ def parse(
 				with open(output_path, 'w') as outfile:
 					outfile.write(annotated_file)
 			except Exception as e:
-				print('    Writing output file failed!')
-				print('    {}'.format(e))
+				util.catprint('parser-ERROR', '    Writing output file failed!')
+				util.catprint('parser-ERROR', '    {}'.format(e))
 
 	return result
 
@@ -293,7 +295,7 @@ def parse_define(state:ParserState, line:str) -> Optional[str]:
 	# We're defining a bare identifier. Is that feature already involved?
 	identifier = m.group('identifier')
 	if identifier in get_involved_features(state.calculate_current_conditional()):
-		print('    Possible include guard: {}'.format(identifier))
+		util.catprint('parser-debug', '    Possible include guard: {}'.format(identifier))
 		return identifier
 
 	return None
