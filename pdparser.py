@@ -42,10 +42,12 @@ ignored_exts = set()
 all_features = set()
 all_features_possible_guards = set()
 all_features_trimmed = set()
-feature_interaction_stats = {}
-nesting_level_stats = {}
-pinpoint_feature_interaction_stats = {}
-pinpoint_nesting_level_stats = {}
+feature_interaction_blocks = {}
+nesting_level_blocks = {}
+pinpoint_feature_interaction_blocks = {}
+pinpoint_nesting_level_blocks = {}
+feature_interaction_lines = {}
+nesting_level_lines = {}
 
 t_start = time.perf_counter()
 
@@ -101,10 +103,12 @@ while folders:
 				# ref:
 				all_features,
 				all_features_possible_guards,
-				nesting_level_stats,
-				feature_interaction_stats,
-				pinpoint_nesting_level_stats,
-				pinpoint_feature_interaction_stats
+				nesting_level_blocks,
+				feature_interaction_blocks,
+				pinpoint_nesting_level_blocks,
+				pinpoint_feature_interaction_blocks,
+				nesting_level_lines,
+				feature_interaction_lines
 			)
 
 			if not result:
@@ -130,9 +134,12 @@ if arg.features:
 	all_features_trimmed = all_features.difference(all_features_possible_guards)
 	util.catprint('feat', '{} features without guards: {}'.format(len(all_features_trimmed), all_features_trimmed))
 
-	util.catprint('info', 'Feature interaction stats (#features occurring in conditional): {}'.format(feature_interaction_stats))
+	util.catprint('info', 'Feature interaction blocks (#features occurring in conditional): {}'.format(feature_interaction_blocks))
 
-util.catprint('info', 'Nesting level stats: {}'.format(nesting_level_stats))
+	util.catprint('info', 'Feature interaction lines (line numbers conditional to X features): {}'.format(feature_interaction_lines))
+
+util.catprint('info', 'Nesting level blocks: {}'.format(nesting_level_blocks))
+util.catprint('info', 'Nesting level lines: {}'.format(nesting_level_lines))
 
 util.catprint('info', 'Total time taken to run: {}'.format(t_taken))
 
@@ -156,8 +163,10 @@ if arg.json_result:
 					'possible_guards': list(all_features_possible_guards),
 					'n_features': len(all_features_trimmed),
 					'features': list(all_features_trimmed),
-					'feature_interaction_stats': feature_interaction_stats,
-					'nesting_level_stats': nesting_level_stats,
+					'feature_interaction_blocks': feature_interaction_blocks,
+					'nesting_level_blocks': nesting_level_blocks,
+					'feature_interaction_lines': feature_interaction_lines,
+					'nesting_level_lines': nesting_level_lines,
 					'time_taken': t_taken,
 				},
 				outfile
@@ -173,10 +182,10 @@ if arg.json_pinpoint:
 	else:
 		json_name = '{}/pdparser-pinpoint-feature-interaction.json'.format(output_folder)
 		with open(json_name, 'w') as outfile:
-			json.dump(pinpoint_feature_interaction_stats, outfile)
+			json.dump(pinpoint_feature_interaction_blocks, outfile)
 		util.catprint('info', 'Wrote feature interaction pinpoint json to {}'.format(json_name))
 
 		json_name = '{}/pdparser-pinpoint-nesting-level.json'.format(output_folder)
 		with open(json_name, 'w') as outfile:
-			json.dump(pinpoint_nesting_level_stats, outfile)
+			json.dump(pinpoint_nesting_level_blocks, outfile)
 		util.catprint('info', 'Wrote nesting level pinpoint json to {}'.format(json_name))

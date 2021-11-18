@@ -80,10 +80,12 @@ def parse(
 	# ref:
 	features: set[str],
 	feature_possible_guards: set[str],
-	nesting_level_stats: dict[int,int],
-	feature_interaction_stats: dict[int,int],
-	pinpoint_nesting_level_stats, # : dict[int, list[
-	pinpoint_feature_interaction_stats
+	nesting_level_blocks: dict[int,int],
+	feature_interaction_blocks: dict[int,int],
+	pinpoint_nesting_level_blocks, # : dict[int, list[
+	pinpoint_feature_interaction_blocks,
+	nesting_level_lines,
+	feature_interaction_lines
 ) -> bool:
 	report_line = ''
 	annotated_file = ''
@@ -99,6 +101,7 @@ def parse(
 			multi_lines = ''
 			line_number = 0
 			multiline_commented = False
+			n_involved_features = 0
 			for full_line in infile:
 				line_number += 1
 
@@ -166,22 +169,22 @@ def parse(
 				continued_line = ''
 				multi_lines = ''
 
+				stack_level = state.get_stack_level()
 				if condition_changed:
-					stack_level = state.get_stack_level()
 					if stack_level > stack_level_deepest:
 						stack_level_deepest = stack_level
 
 					if stack_level >= stack_level_latest:
-						if stack_level in nesting_level_stats:
-							nesting_level_stats[stack_level] += 1
+						if stack_level in nesting_level_blocks:
+							nesting_level_blocks[stack_level] += 1
 						else:
-							nesting_level_stats[stack_level] = 1
+							nesting_level_blocks[stack_level] = 1
 
 						if arg.json_pinpoint:
-							if stack_level not in pinpoint_nesting_level_stats:
-								pinpoint_nesting_level_stats[stack_level] = []
+							if stack_level not in pinpoint_nesting_level_blocks:
+								pinpoint_nesting_level_blocks[stack_level] = []
 
-							pinpoint_nesting_level_stats[stack_level].append(
+							pinpoint_nesting_level_blocks[stack_level].append(
 								[relative_path, line_number]
 							)
 
@@ -202,18 +205,29 @@ def parse(
 						features.update(current_involved_features)
 
 						n_involved_features = len(current_involved_features)
-						if n_involved_features in feature_interaction_stats:
-							feature_interaction_stats[n_involved_features] += 1
+						if n_involved_features in feature_interaction_blocks:
+							feature_interaction_blocks[n_involved_features] += 1
 						else:
-							feature_interaction_stats[n_involved_features] = 1
+							feature_interaction_blocks[n_involved_features] = 1
 
 						if arg.json_pinpoint:
-							if n_involved_features not in pinpoint_feature_interaction_stats:
-								pinpoint_feature_interaction_stats[n_involved_features] = []
+							if n_involved_features not in pinpoint_feature_interaction_blocks:
+								pinpoint_feature_interaction_blocks[n_involved_features] = []
 
-							pinpoint_feature_interaction_stats[n_involved_features].append(
+							pinpoint_feature_interaction_blocks[n_involved_features].append(
 								[relative_path, line_number, condition]
 							)
+
+				# Some line-based stats
+				if stack_level in nesting_level_lines:
+					nesting_level_lines[stack_level] += 1
+				else:
+					nesting_level_lines[stack_level] = 1
+
+				if n_involved_features in feature_interaction_lines:
+					feature_interaction_lines[n_involved_features] += 1
+				else:
+					feature_interaction_lines[n_involved_features] = 1
 
 			if not state.stack_is_empty():
 				raise DirectiveParseError('Unexpected EOF, too few #endif!')
