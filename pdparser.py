@@ -40,7 +40,8 @@ n_ignored_files = 0
 n_parser_errors = 0
 ignored_exts = set()
 all_features = set()
-all_features_possible_guards = set()
+all_features_possible_guards = set() # possible include guards - features #define'd conditional to themselves
+all_features_not_guards = set() # not include guards - features #define'd outside of their own conditional
 all_features_trimmed = set()
 feature_interaction_blocks = {}
 nesting_level_blocks = {}
@@ -103,6 +104,7 @@ while folders:
 				# ref:
 				all_features,
 				all_features_possible_guards,
+				all_features_not_guards,
 				nesting_level_blocks,
 				feature_interaction_blocks,
 				pinpoint_nesting_level_blocks,
@@ -129,14 +131,29 @@ util.catprint('info', '{} source files, {} ignored files, {} parser errors'.form
 util.catprint('info', 'Ignored file extensions: {}'.format(ignored_exts))
 
 if arg.features:
-	util.catprint('feat', '{} possible guards: {}'.format(len(all_features_possible_guards), all_features_possible_guards))
+	# First subtract the "not guards" from the "possible guards"...
+	all_features_possible_guards = all_features_possible_guards.difference(all_features_not_guards)
+
+	util.catprint('feat', '{} possible guards: {}'.format(
+			len(all_features_possible_guards), all_features_possible_guards
+		)
+	)
 
 	all_features_trimmed = all_features.difference(all_features_possible_guards)
-	util.catprint('feat', '{} features without guards: {}'.format(len(all_features_trimmed), all_features_trimmed))
+	util.catprint('feat', '{} features without guards: {}'.format(
+			len(all_features_trimmed), all_features_trimmed
+		)
+	)
 
-	util.catprint('info', 'Feature interaction blocks (#features occurring in conditional): {}'.format(feature_interaction_blocks))
+	util.catprint('info', 'Feature interaction blocks (#features occurring in conditional): {}'.format(
+			feature_interaction_blocks
+		)
+	)
 
-	util.catprint('info', 'Feature interaction lines (line numbers conditional to X features): {}'.format(feature_interaction_lines))
+	util.catprint('info', 'Feature interaction lines (line numbers conditional to X features): {}'.format(
+			feature_interaction_lines
+		)
+	)
 
 util.catprint('info', 'Nesting level blocks: {}'.format(nesting_level_blocks))
 util.catprint('info', 'Nesting level lines: {}'.format(nesting_level_lines))
@@ -161,6 +178,8 @@ if arg.json_result:
 					'ignored_exts': list(ignored_exts),
 					'n_possible_guards': len(all_features_possible_guards),
 					'possible_guards': list(all_features_possible_guards),
+					'n_other_defines': len(all_features_not_guards),
+					'other_defines': list(all_features_not_guards),
 					'n_features': len(all_features_trimmed),
 					'features': list(all_features_trimmed),
 					'feature_interaction_blocks': feature_interaction_blocks,

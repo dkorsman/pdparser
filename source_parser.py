@@ -1,7 +1,7 @@
 import argparse
 import os
 import re
-from typing import Optional
+from typing import Optional, Tuple
 
 import util
 
@@ -80,6 +80,7 @@ def parse(
 	# ref:
 	features: set[str],
 	feature_possible_guards: set[str],
+	feature_not_guards: set[str],
 	nesting_level_blocks: dict[int,int],
 	feature_interaction_blocks: dict[int,int],
 	pinpoint_nesting_level_blocks, # : dict[int, list[
@@ -158,9 +159,11 @@ def parse(
 					elif clean_line.startswith('#endif'):
 						parse_endif(state, clean_line)
 					elif clean_line.startswith('#define') and arg.features:
-						possible_guard = parse_define(state, clean_line)
-						if possible_guard is not None:
-							feature_possible_guards.add(possible_guard)
+						(possible_guard, identifier) = parse_define(state, clean_line)
+						if possible_guard:
+							feature_possible_guards.add(identifier)
+						elif identifier is not None:
+							feature_not_guards.add(identifier)
 						condition_changed = False
 					else:
 						condition_changed = False
@@ -299,17 +302,18 @@ def parse_endif(state:ParserState, line:str) -> None:
 
 	state.end_if()
 
-def parse_define(state:ParserState, line:str) -> Optional[str]:
+def parse_define(state:ParserState, line:str) -> Tuple[bool, Optional[str]]:
 	#define POSSIBLE_INCLUDE_GUARD
+	# Returns whether this feature is a possible include guard, and the identifier
 	m = re.search('^#define\s+(?P<identifier>[A-Za-z0-9_]+)\s*$', line)
 	if m is None:
 		# We're actually defining something here, or we can't parse it - but it's off the table
-		return None
+		return (False, None)
 
 	# We're defining a bare identifier. Is that feature already involved?
 	identifier = m.group('identifier')
 	if identifier in get_involved_features(state.calculate_current_conditional()):
 		util.catprint('parser-debug', '    Possible include guard: {}'.format(identifier))
-		return identifier
+		return (True, identifier)
 
-	return None
+	return (False, identifier)
