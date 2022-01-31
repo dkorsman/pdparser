@@ -17,6 +17,7 @@ arg_parse.add_argument('-f', '--features', action='store_true', help='try to get
 arg_parse.add_argument('-B', '--no-blacklist', action='store_true', help='ignore pdparser-blacklist.lst file (to get all files again)')
 arg_parse.add_argument('-jr', '--json-result', action='store_true', help='store a json file with general results in the output folder')
 arg_parse.add_argument('-jp', '--json-pinpoint', action='store_true', help='store json files with all locations of nesting levels and feature interactions')
+arg_parse.add_argument('-u', '--unique-feature-filter', type=str, help='the count-project-features.json to use for filtering UNIQUE features - pass only if you want to filter')
 arg = arg_parse.parse_args()
 
 if arg.quiet is not None:
@@ -36,6 +37,9 @@ util.catprint('info', 'Using source folder {}'.format(source_folder))
 folders = [source_folder]
 
 n_source_files = 0
+n_code_lines = 0 # code lines: comments and blank lines are ignored
+n_counted_lines = 0 # counted lines: lines ending in \ are merged
+n_total_lines = 0
 n_ignored_files = 0
 n_parser_errors = 0
 ignored_exts = set()
@@ -67,6 +71,17 @@ else:
 		util.catprint('info', 'Blacklist file not present (search path: {}), accepting all paths'.format(blacklist_name))
 		pass
 
+unique_features = set()
+if arg.unique_feature_filter is not None:
+	try:
+		with open(arg.unique_feature_filter, 'r') as infile:
+			uff_data = json.load(infile)
+
+			unique_features = set(uff_data['count_features']['1'])
+	except FileNotFoundError:
+		util.catprint('ERROR', '-u/--unique-feature-filter passed, but file not found! Reverting to no filtering')
+		arg.unique_feature_filter = None
+
 
 while folders:
 	folder = folders.pop(0)
@@ -96,7 +111,7 @@ while folders:
 			util.catprint('debug', 'Found {}'.format(relative_path))
 			n_source_files += 1
 
-			result = source_parser.parse(
+			(result, code_lines, counted_lines, total_lines) = source_parser.parse(
 				f.path,
 				relative_path,
 				output_folder,
@@ -110,11 +125,16 @@ while folders:
 				pinpoint_nesting_level_blocks,
 				pinpoint_feature_interaction_blocks,
 				nesting_level_lines,
-				feature_interaction_lines
+				feature_interaction_lines,
+				unique_features
 			)
 
 			if not result:
 				n_parser_errors += 1
+
+			n_code_lines += code_lines
+			n_counted_lines += counted_lines
+			n_total_lines += total_lines
 		else:
 			util.catprint('debug', 'Ignoring non-C/C++ file {}'.format(relative_path))
 			n_ignored_files += 1
@@ -161,6 +181,9 @@ util.catprint('info', 'Nesting level lines: {}'.format(nesting_level_lines))
 util.catprint('info', 'Total time taken to run: {}'.format(t_taken))
 
 
+unique_features_filtered = arg.unique_feature_filter is not None
+filter_prefix = 'filt-' if unique_features_filtered else ''
+
 if arg.json_result:
 	if output_folder is None:
 		util.catprint('ERROR', '-jr/--json-result passed, but no output folder specified!')
@@ -168,20 +191,28 @@ if arg.json_result:
 		if not arg.features:
 			util.catprint('ERROR', '-jr/--json-result passed, but not -f/--features (will be empty!)')
 
-		json_name = '{}/pdparser-result.json'.format(output_folder)
+		json_name = '{}/{}pdparser-result.json'.format(output_folder, filter_prefix)
 		with open(json_name, 'w') as outfile:
+			n_possible_guards = len(all_features_possible_guards)
+			n_features = len(all_features_trimmed)
+
 			json.dump(
 				{
+					'unique_features_filtered': unique_features_filtered,
 					'n_source_files': n_source_files,
+					'n_code_lines': n_code_lines,
+					'n_counted_lines': n_counted_lines,
+					'n_total_lines': n_total_lines,
 					'n_ignored_files': n_ignored_files,
 					'n_parser_errors': n_parser_errors,
 					'ignored_exts': list(ignored_exts),
-					'n_possible_guards': len(all_features_possible_guards),
+					'n_possible_guards': n_possible_guards,
 					'possible_guards': list(all_features_possible_guards),
 					'n_other_defines': len(all_features_not_guards),
 					'other_defines': list(all_features_not_guards),
-					'n_features': len(all_features_trimmed),
+					'n_features': n_features,
 					'features': list(all_features_trimmed),
+					'n_features_plus_guards': n_features + n_possible_guards,
 					'feature_interaction_blocks': feature_interaction_blocks,
 					'nesting_level_blocks': nesting_level_blocks,
 					'feature_interaction_lines': feature_interaction_lines,
@@ -199,12 +230,12 @@ if arg.json_pinpoint:
 	elif not arg.features:
 		util.catprint('ERROR', '-jr/--json-pinpoint passed, but not -f/--features!)')
 	else:
-		json_name = '{}/pdparser-pinpoint-feature-interaction.json'.format(output_folder)
+		json_name = '{}/{}pdparser-pinpoint-feature-interaction.json'.format(output_folder, filter_prefix)
 		with open(json_name, 'w') as outfile:
 			json.dump(pinpoint_feature_interaction_blocks, outfile)
 		util.catprint('info', 'Wrote feature interaction pinpoint json to {}'.format(json_name))
 
-		json_name = '{}/pdparser-pinpoint-nesting-level.json'.format(output_folder)
+		json_name = '{}/{}pdparser-pinpoint-nesting-level.json'.format(output_folder, filter_prefix)
 		with open(json_name, 'w') as outfile:
 			json.dump(pinpoint_nesting_level_blocks, outfile)
 		util.catprint('info', 'Wrote nesting level pinpoint json to {}'.format(json_name))

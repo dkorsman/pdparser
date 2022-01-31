@@ -70,8 +70,12 @@ class ParserState:
 		return conditional
 
 def get_involved_features(condition:str) -> set[str]:
-	return set(re.findall('defined\s*[\(\s]\s*([A-Za-z0-9_]+)\s*\)?', condition))
+	# (?:...) non-capturing group
+	return set(re.findall('(?:defined|BUILDFLAG)\s*[\(\s]\s*([A-Za-z0-9_]+)\s*\)?', condition))
 
+# This has become a long list of positional arguments and even return values
+# TODO: pass a shared "state" object instead that has all this data and some
+#       manipulation methods to make this cleaner
 def parse(
 	path: str,
 	relative_path: str,
@@ -86,13 +90,17 @@ def parse(
 	pinpoint_nesting_level_blocks, # : dict[int, list[
 	pinpoint_feature_interaction_blocks,
 	nesting_level_lines,
-	feature_interaction_lines
-) -> bool:
+	feature_interaction_lines,
+	unique_features: set[str]
+) -> Tuple[bool, int, int, int]:
 	report_line = ''
 	annotated_file = ''
 	stack_level_deepest = 0
 	stack_level_latest = 0
 	result = False
+	code_lines = 0
+	counted_lines = 0
+	total_lines = 0
 	try:
 		# Interpreting UTF-8 as old-school-codepage won't matter in our case, other way around is a crash...
 		with open(path, 'r', encoding="ISO-8859-1") as infile:
@@ -111,6 +119,8 @@ def parse(
 				if full_line.endswith('\\\n') or full_line.endswith('\\\r\n'):
 					continued_line += full_line.strip()[:-1] + ' '
 					multi_lines += full_line
+					code_lines += 1
+					total_lines += 1
 					continue
 
 				clean_line = full_line
@@ -145,6 +155,11 @@ def parse(
 
 				clean_line = clean_line.strip()
 				clean_line = re.sub('^#\s+', '#', clean_line)
+
+				if clean_line != '':
+					code_lines += 1
+				counted_lines += 1
+				total_lines += 1
 
 				condition_changed = False
 				if clean_line.startswith('#'):
@@ -202,6 +217,9 @@ def parse(
 
 					if arg.features:
 						current_involved_features = get_involved_features(condition)
+
+						if arg.unique_feature_filter is not None:
+							current_involved_features.intersection_update(unique_features)
 
 						annotated_file += '// [pdparser] Features involved: {}\n'.format(current_involved_features)
 
@@ -261,7 +279,7 @@ def parse(
 				util.catprint('parser-ERROR', '    Writing output file failed!')
 				util.catprint('parser-ERROR', '    {}'.format(e))
 
-	return result
+	return result, code_lines, counted_lines, total_lines
 
 def parse_ifdef(state:ParserState, line:str) -> None:
 	#ifn?def IDENTIFIER
