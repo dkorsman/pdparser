@@ -58,12 +58,17 @@ The video can also be watched on [youtube](https://www.youtube.com/watch?v=vrXnQ
 For more information, feel free to contact the authors or use the issues/pull request menu.
 
 ### David Korsman
+
 Email: <david.korsman@ru.nl>
 
 ### Carlos Diego N. Damasceno
+
 Email: <damasceno.diego [at] gmail.com> 
+
 Website: http://damascenodiego.github.io
 
 ### Daniel Strüber
+
 Email: <danstru [at] chalmers.se>
+
 Website: https://www.danielstrueber.de/
