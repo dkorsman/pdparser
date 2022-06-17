@@ -59,7 +59,7 @@ For more information, feel free to contact the authors or use the issues/pull re
 
 ### David Korsman
 
-Email: <david.korsman@ru.nl>
+Email: <david.korsman [at] ru.nl>
 
 ### Carlos Diego N. Damasceno
 
